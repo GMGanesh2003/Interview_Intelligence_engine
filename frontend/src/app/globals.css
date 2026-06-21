@@ -1,0 +1,105 @@
+@import "tailwindcss";
+
+/*
+  Design tokens — "black box recorder" instrument-panel theme.
+  Grounded in the subject: this product records and replays interview
+  telemetry (video + audio signals), so the UI borrows from cockpit /
+  oscilloscope displays rather than a generic SaaS dashboard.
+*/
+:root {
+  --background: #0a0c0f;
+  --panel: #12151a;
+  --panel-raised: #161a20;
+  --line: #232830;
+  --foreground: #e7eaee;
+  --muted: #8b93a1;
+  --signal: #5eead4;       /* teal — good signal / primary accent */
+  --signal-dim: #2dd4bf33;
+  --warn: #f5b544;         /* amber — caution */
+  --alert: #f2545b;        /* red — drops / issues */
+
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-space-grotesk);
+  --font-mono: var(--font-jetbrains-mono);
+
+  --radius: 0.25rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-panel: var(--panel);
+  --color-panel-raised: var(--panel-raised);
+  --color-line: var(--line);
+  --color-muted: var(--muted);
+  --color-signal: var(--signal);
+  --color-warn: var(--warn);
+  --color-alert: var(--alert);
+  --font-sans: var(--font-sans);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 4px);
+}
+
+* {
+  border-color: var(--line);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+/* signature scanline accent used across page headers */
+.scanline {
+  height: 1px;
+  width: 100%;
+  background: linear-gradient(90deg, transparent, var(--signal) 50%, transparent);
+  background-size: 200% 100%;
+  animation: scan 3.5s linear infinite;
+  opacity: 0.7;
+}
+
+@keyframes scan {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scanline {
+    animation: none;
+  }
+}
+
+.bg-grid {
+  position: absolute;
+  top: -50px; /* Overshoot to prevent tearing during animation */
+  left: 0;
+  right: 0;
+  bottom: -50px;
+  background-size: 40px 40px;
+  background-image: 
+    linear-gradient(to right, rgba(94, 234, 212, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(94, 234, 212, 0.04) 1px, transparent 1px);
+  mask-image: linear-gradient(to bottom, transparent 5%, black 40%, black 60%, transparent 95%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 5%, black 40%, black 60%, transparent 95%);
+  animation: moveGrid 15s linear infinite;
+  z-index: -1;
+  pointer-events: none;
+}
+
+@keyframes moveGrid {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(40px); }
+}
