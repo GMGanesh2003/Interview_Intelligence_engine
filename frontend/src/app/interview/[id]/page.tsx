@@ -27,6 +27,7 @@ export default function InterviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [liveSample, setLiveSample] = useState<FaceSample | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const [isProcessingLong, setIsProcessingLong] = useState(false);
 
   const bufferRef = useRef<VideoMetricSample[]>([]);
   const sessionStartRef = useRef<number>(0);
@@ -102,15 +103,21 @@ export default function InterviewPage() {
     if (phase === "ready" || phase === "review") {
       recorder.start();
       setPhase("recording");
+      setIsProcessingLong(false);
     } else if (phase === "recording") {
       setPhase("processing");
       const blob = await recorder.stop();
       const offset = (performance.now() - sessionStartRef.current) / 1000;
+      
+      const timeoutId = setTimeout(() => setIsProcessingLong(true), 8000);
+      
       try {
         const result = await api.submitAnswer(currentQuestion.id, offset, blob);
+        clearTimeout(timeoutId);
         setLastResult(result);
         setPhase("review");
       } catch (e) {
+        clearTimeout(timeoutId);
         setError(e instanceof Error ? e.message : "Failed to analyze answer");
         setPhase("ready");
       }
@@ -223,9 +230,16 @@ export default function InterviewPage() {
                   </Button>
                 )}
                 {phase === "processing" && (
-                  <Button disabled size="lg" className="flex-1">
-                    Analyzing answer…
-                  </Button>
+                  <div className="flex-1 flex flex-col gap-2">
+                    <Button disabled size="lg" className="w-full">
+                      Analyzing answer…
+                    </Button>
+                    {isProcessingLong && (
+                      <p className="text-xs text-muted text-center animate-pulse">
+                        This is taking longer than usual. If the free server is waking up, this can take up to 60 seconds. Please wait... (If it gets stuck, refresh the page)
+                      </p>
+                    )}
+                  </div>
                 )}
                 {phase === "review" && (
                   <Button onClick={handleNext} size="lg" className="flex-1">
