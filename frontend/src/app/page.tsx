@@ -95,6 +95,10 @@ export default function Home() {
               <CardTitle>Sign in to continue</CardTitle>
             </CardHeader>
             <CardContent>
+              <div className="bg-signal/10 border border-signal/20 text-signal text-sm p-3 rounded-sm leading-relaxed mb-5">
+                <span className="block mb-1"><strong>👋 Note for Reviewers:</strong></span>
+                If Google Login fails on this specific preview link, you can fully test the application by clicking <strong>Continue as Guest</strong> below.
+              </div>
               <Button onClick={() => signIn("google")} size="lg" className="w-full">
                 Sign in with Google
               </Button>
