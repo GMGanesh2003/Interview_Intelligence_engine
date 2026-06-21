@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
     };
     return config;
   },
+  serverExternalPackages: ["pdfjs-dist", "canvas"],
   experimental: {
     turbo: {
       resolveAlias: {
