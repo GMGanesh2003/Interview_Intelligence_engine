@@ -236,7 +236,7 @@ export default function InterviewPage() {
                     </Button>
                     {isProcessingLong && (
                       <p className="text-xs text-muted text-center animate-pulse">
-                        This is taking longer than usual. If the free server is waking up, this can take up to 60 seconds. Please wait... (If it gets stuck, refresh the page)
+                        The AI is performing an in-depth analysis of your technical depth, communication skills, and vocal energy. This comprehensive evaluation takes a moment... (If it gets stuck, please refresh the page)
                       </p>
                     )}
                   </div>
