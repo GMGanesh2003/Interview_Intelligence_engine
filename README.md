@@ -4,7 +4,7 @@
 
 ### AI-Powered Mock Interview Platform with Real-Time Behavioral Analysis
 
-[![Live Demo](https://img.shields.io/badge/🌐_Live_Demo-Vercel-black?style=for-the-badge)](https://interview-intelligence-engine-hbli75xw6.vercel.app/)
+[![Live Demo](https://img.shields.io/badge/🌐_Live_Demo-Vercel-black?style=for-the-badge)](https://interview-intelligence-engine.vercel.app/)
 [![Backend API](https://img.shields.io/badge/⚡_API-Render-46E3B7?style=for-the-badge)](https://interview-intelligence-engine-1.onrender.com/)
 [![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org)
@@ -12,7 +12,7 @@
 
 **Run a recorded mock interview where every signal — eye contact, speaking pace, filler words, vocal energy, technical depth — is measured by AI and benchmarked against placed candidates.**
 
-[Live Demo](https://interview-intelligence-engine-hbli75xw6.vercel.app/) · [API Docs](https://interview-intelligence-engine-1.onrender.com/docs) · [Report Bug](https://github.com/GMGanesh2003/Interview_Intelligence_engine/issues)
+[Live Demo](https://interview-intelligence-engine.vercel.app/) · [API Docs](https://interview-intelligence-engine-1.onrender.com/docs) · [Report Bug](https://github.com/GMGanesh2003/Interview_Intelligence_engine/issues)
 
 </div>
 
