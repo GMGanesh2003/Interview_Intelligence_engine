@@ -8,7 +8,10 @@ RUN apt-get update && apt-get install -y \
     libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Upgrade pip to latest
+RUN pip install --upgrade pip
+
+# Install Python dependencies (cache bust v2)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
