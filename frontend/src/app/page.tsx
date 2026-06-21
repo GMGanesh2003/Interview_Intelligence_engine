@@ -6,11 +6,6 @@ import { useSession, signIn, signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/lib/api";
-import * as pdfjsLib from "pdfjs-dist";
-
-if (typeof window !== "undefined") {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-}
 
 export default function Home() {
   const router = useRouter();
@@ -30,6 +25,9 @@ export default function Home() {
 
     if (file.type === "application/pdf") {
       try {
+        const pdfjsLib = await import("pdfjs-dist");
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+        
         const arrayBuffer = await file.arrayBuffer();
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         let text = "";
