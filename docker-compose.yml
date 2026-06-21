@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/interview_engine_v2.db:/app/interview_engine_v2.db
+      - ./backend/app/storage/audio:/app/app/storage/audio
+    env_file:
+      - ./backend/.env
+    environment:
+      - HOST=0.0.0.0
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./frontend/.env.local
+    environment:
+      - NEXT_PUBLIC_API_BASE=http://localhost:8000
+      - NEXTAUTH_URL=http://localhost:3000
+    depends_on:
+      - backend
