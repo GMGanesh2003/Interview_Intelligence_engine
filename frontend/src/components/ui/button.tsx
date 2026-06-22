@@ -4,21 +4,21 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-sm text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-all duration-150 disabled:pointer-events-none disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal focus-visible:ring-offset-2 focus-visible:ring-offset-background select-none",
   {
     variants: {
       variant: {
-        default: "bg-signal text-[#06201c] hover:bg-signal/90",
-        outline: "border border-line bg-transparent text-foreground hover:bg-panel-raised",
-        ghost: "bg-transparent text-foreground hover:bg-panel-raised",
-        destructive: "bg-alert text-white hover:bg-alert/90",
-        subtle: "bg-panel-raised text-foreground hover:bg-line",
+        default:     "bg-gradient-to-r from-signal to-blue text-[#050709] hover:opacity-90 shadow-sm",
+        outline:     "border border-line bg-transparent text-foreground hover:border-signal/30 hover:bg-signal-dim hover:text-signal",
+        ghost:       "bg-transparent text-muted hover:bg-panel-raised hover:text-foreground",
+        destructive: "bg-alert text-white hover:bg-alert/90 shadow-sm",
+        subtle:      "bg-panel-raised text-foreground hover:bg-line border border-line",
       },
       size: {
         default: "h-10 px-4 py-2",
-        sm: "h-8 px-3 text-xs",
-        lg: "h-12 px-6 text-base",
-        icon: "h-10 w-10",
+        sm:      "h-8 px-3 text-xs",
+        lg:      "h-12 px-6 text-base",
+        icon:    "h-10 w-10",
       },
     },
     defaultVariants: {
