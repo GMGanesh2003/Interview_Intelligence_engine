@@ -1,62 +1,59 @@
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
-import { getSession } from "next-auth/react";
 
 /**
- * Build auth headers for backend requests.
- *
- * Token strategy:
- *  - Guest users → send the static "guest_token_123" string that the backend
- *    recognises directly.
- *  - Google users → send the NextAuth-issued JWT (signed with NEXTAUTH_SECRET,
- *    HS256). The backend decodes this with the same secret and reads sub/email/name.
- *    This token is long-lived (30 days by default in NextAuth) so it never
- *    expires the way a raw Google id_token (1 h) does.
- *
- * We retrieve the raw NextAuth session JWT via the /__nextauth/session endpoint
- * which returns the encoded JWT in the `__Secure-next-auth.session-token` cookie.
- * A simpler approach: call /api/auth/session to get decoded payload and re-encode
- * with the secret — but easiest is just to read the cookie directly from the
- * browser, which is what getCsrfToken / getSession give us access to.
- *
- * Simplest reliable approach that works in both dev & production:
- * Use the encoded cookie token. We fetch it via a dedicated endpoint we add.
+ * Auth token cache — avoids calling /api/auth/token on every request.
+ * Refreshes when the cached token is within 10 minutes of expiry.
  */
+let _cachedToken: string | null = null;
+let _tokenExpiry: number = 0; // unix timestamp ms
 
 async function getAuthToken(): Promise<string | null> {
-  const session = await getSession();
-  if (!session) return null;
+  const now = Date.now();
 
-  const s = session as any;
-
-  // Guest flow
-  if (s.provider === "guest" || s.userId === "guest") {
-    return "guest_token_123";
+  // Return cached token if still valid (with 10-min buffer)
+  if (_cachedToken && _tokenExpiry - now > 10 * 60 * 1000) {
+    return _cachedToken;
   }
 
-  // For Google users: fetch the raw session token from our helper endpoint
-  // This gives the NextAuth-signed JWT that the backend can verify with NEXTAUTH_SECRET
   try {
-    const res = await fetch("/api/auth/token");
-    if (res.ok) {
-      const data = await res.json();
-      if (data.token) return data.token;
-    }
-  } catch (_) {
-    // fall through
-  }
+    const res = await fetch("/api/auth/token", { credentials: "include" });
+    if (!res.ok) return null;
 
-  // Fallback: use the Google id_token (may be expired but try anyway)
-  return s.idToken || null;
+    const data = await res.json();
+    if (!data.token) return null;
+
+    // Guest token never expires on our end
+    if (data.token === "guest_token_123") {
+      _cachedToken = data.token;
+      _tokenExpiry = now + 24 * 60 * 60 * 1000; // 24h
+      return _cachedToken;
+    }
+
+    // Decode expiry from JWT payload (no verification needed here — we just
+    // need the exp claim to know when to refresh)
+    try {
+      const payloadB64 = data.token.split(".")[1];
+      const payload = JSON.parse(atob(payloadB64));
+      _tokenExpiry = (payload.exp || 0) * 1000; // convert to ms
+    } catch {
+      _tokenExpiry = now + 90 * 60 * 1000; // fallback: 90 min
+    }
+
+    _cachedToken = data.token;
+    return _cachedToken;
+  } catch {
+    return null;
+  }
 }
 
 async function getAuthHeaders(
-  existingHeaders: Record<string, string> = {}
+  existing: Record<string, string> = {}
 ): Promise<Record<string, string>> {
   const token = await getAuthToken();
-  return token
-    ? { ...existingHeaders, Authorization: `Bearer ${token}` }
-    : existingHeaders;
+  return token ? { ...existing, Authorization: `Bearer ${token}` } : existing;
 }
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export type Question = {
   id: number;
@@ -138,6 +135,8 @@ export type ReplayEvent = {
   label: string;
 };
 
+// ─── HTTP helper ──────────────────────────────────────────────────────────────
+
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let detail = res.statusText;
@@ -145,12 +144,14 @@ async function handle<T>(res: Response): Promise<T> {
       const body = await res.json();
       detail = body.detail || detail;
     } catch {
-      // ignore
+      /* ignore */
     }
     throw new Error(detail);
   }
   return res.json();
 }
+
+// ─── API client ───────────────────────────────────────────────────────────────
 
 export const api = {
   createSession: async (payload: {
