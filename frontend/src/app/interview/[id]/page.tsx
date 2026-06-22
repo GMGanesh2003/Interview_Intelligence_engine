@@ -81,10 +81,33 @@ export default function InterviewPage() {
         if (!active) return;
         setQuestions(qs);
 
-        const media = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true,
-        });
+        let media: MediaStream;
+        try {
+          // First attempt: try getting both camera and microphone
+          media = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: true,
+          });
+        } catch (err: any) {
+          console.warn("Could not get both camera and mic:", err.name, err.message);
+          // If the device physically lacks a webcam (NotFoundError)
+          if (err.name === 'NotFoundError' || err.message.includes('device not found')) {
+            try {
+              // Fallback: try getting JUST the microphone
+              media = await navigator.mediaDevices.getUserMedia({
+                video: false,
+                audio: true,
+              });
+              speak("No camera detected. Proceeding in audio-only mode.");
+            } catch (fallbackErr) {
+              throw new Error("No microphone detected. A microphone is required for the interview.");
+            }
+          } else if (err.name === 'NotAllowedError') {
+            throw new Error("Camera or microphone access was blocked by your browser. Please click the padlock icon in your URL bar and allow access.");
+          } else {
+            throw err;
+          }
+        }
         if (!active) return;
         setStream(media);
         sessionStartRef.current = performance.now();
@@ -160,7 +183,8 @@ export default function InterviewPage() {
     }
   }, []);
 
-  const tracking = useFaceTracking(videoRef, !!stream, onFaceSample);
+  const hasVideo = stream ? stream.getVideoTracks().length > 0 : false;
+  const tracking = useFaceTracking(videoRef, hasVideo, onFaceSample);
 
   const currentQuestion = questions[currentIndex];
   const isLast          = currentIndex === questions.length - 1;
