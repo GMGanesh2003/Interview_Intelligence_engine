@@ -1,10 +1,61 @@
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 import { getSession } from "next-auth/react";
 
-async function getAuthHeaders(existingHeaders: Record<string, string> = {}) {
+/**
+ * Build auth headers for backend requests.
+ *
+ * Token strategy:
+ *  - Guest users → send the static "guest_token_123" string that the backend
+ *    recognises directly.
+ *  - Google users → send the NextAuth-issued JWT (signed with NEXTAUTH_SECRET,
+ *    HS256). The backend decodes this with the same secret and reads sub/email/name.
+ *    This token is long-lived (30 days by default in NextAuth) so it never
+ *    expires the way a raw Google id_token (1 h) does.
+ *
+ * We retrieve the raw NextAuth session JWT via the /__nextauth/session endpoint
+ * which returns the encoded JWT in the `__Secure-next-auth.session-token` cookie.
+ * A simpler approach: call /api/auth/session to get decoded payload and re-encode
+ * with the secret — but easiest is just to read the cookie directly from the
+ * browser, which is what getCsrfToken / getSession give us access to.
+ *
+ * Simplest reliable approach that works in both dev & production:
+ * Use the encoded cookie token. We fetch it via a dedicated endpoint we add.
+ */
+
+async function getAuthToken(): Promise<string | null> {
   const session = await getSession();
-  const token = session ? (session as any).idToken : null;
-  return token ? { ...existingHeaders, Authorization: `Bearer ${token}` } : existingHeaders;
+  if (!session) return null;
+
+  const s = session as any;
+
+  // Guest flow
+  if (s.provider === "guest" || s.userId === "guest") {
+    return "guest_token_123";
+  }
+
+  // For Google users: fetch the raw session token from our helper endpoint
+  // This gives the NextAuth-signed JWT that the backend can verify with NEXTAUTH_SECRET
+  try {
+    const res = await fetch("/api/auth/token");
+    if (res.ok) {
+      const data = await res.json();
+      if (data.token) return data.token;
+    }
+  } catch (_) {
+    // fall through
+  }
+
+  // Fallback: use the Google id_token (may be expired but try anyway)
+  return s.idToken || null;
+}
+
+async function getAuthHeaders(
+  existingHeaders: Record<string, string> = {}
+): Promise<Record<string, string>> {
+  const token = await getAuthToken();
+  return token
+    ? { ...existingHeaders, Authorization: `Bearer ${token}` }
+    : existingHeaders;
 }
 
 export type Question = {
@@ -102,7 +153,12 @@ async function handle<T>(res: Response): Promise<T> {
 }
 
 export const api = {
-  createSession: async (payload: { resume_text: string; role: string; experience: string; num_questions: number }) =>
+  createSession: async (payload: {
+    resume_text: string;
+    role: string;
+    experience: string;
+    num_questions: number;
+  }) =>
     fetch(`${API_BASE}/api/sessions`, {
       method: "POST",
       headers: await getAuthHeaders({ "Content-Type": "application/json" }),
@@ -110,7 +166,9 @@ export const api = {
     }).then((r) => handle<SessionResp>(r)),
 
   getQuestions: async (sessionId: number) =>
-    fetch(`${API_BASE}/api/sessions/${sessionId}/questions`, { headers: await getAuthHeaders() }).then((r) => handle<Question[]>(r)),
+    fetch(`${API_BASE}/api/sessions/${sessionId}/questions`, {
+      headers: await getAuthHeaders(),
+    }).then((r) => handle<Question[]>(r)),
 
   postVideoMetrics: async (sessionId: number, metrics: VideoMetricSample[]) =>
     fetch(`${API_BASE}/api/sessions/${sessionId}/video-metrics`, {
@@ -119,30 +177,40 @@ export const api = {
       body: JSON.stringify({ metrics }),
     }).then((r) => handle(r)),
 
-  submitAnswer: async (questionId: number, sessionStartOffset: number, audioBlob: Blob) => {
+  submitAnswer: async (
+    questionId: number,
+    sessionStartOffset: number,
+    audioBlob: Blob
+  ) => {
     const form = new FormData();
     form.append("question_id", String(questionId));
     form.append("session_start_offset", String(sessionStartOffset));
     form.append("audio", audioBlob, "answer.webm");
-    return fetch(`${API_BASE}/api/answers`, { 
-      method: "POST", 
+    return fetch(`${API_BASE}/api/answers`, {
+      method: "POST",
       body: form,
       headers: await getAuthHeaders(),
     }).then((r) => handle<AnswerResult>(r));
   },
 
   completeSession: async (sessionId: number) =>
-    fetch(`${API_BASE}/api/sessions/${sessionId}/complete`, { 
+    fetch(`${API_BASE}/api/sessions/${sessionId}/complete`, {
       method: "POST",
       headers: await getAuthHeaders(),
     }).then((r) => handle<SessionResp>(r)),
 
   getDashboard: async (sessionId: number) =>
-    fetch(`${API_BASE}/api/sessions/${sessionId}/dashboard`, { headers: await getAuthHeaders() }).then((r) => handle<DashboardResp>(r)),
+    fetch(`${API_BASE}/api/sessions/${sessionId}/dashboard`, {
+      headers: await getAuthHeaders(),
+    }).then((r) => handle<DashboardResp>(r)),
 
   getBenchmark: async (sessionId: number) =>
-    fetch(`${API_BASE}/api/sessions/${sessionId}/benchmark`, { headers: await getAuthHeaders() }).then((r) => handle<BenchmarkResp>(r)),
+    fetch(`${API_BASE}/api/sessions/${sessionId}/benchmark`, {
+      headers: await getAuthHeaders(),
+    }).then((r) => handle<BenchmarkResp>(r)),
 
   getReplay: async (sessionId: number) =>
-    fetch(`${API_BASE}/api/sessions/${sessionId}/replay`, { headers: await getAuthHeaders() }).then((r) => handle<ReplayEvent[]>(r)),
+    fetch(`${API_BASE}/api/sessions/${sessionId}/replay`, {
+      headers: await getAuthHeaders(),
+    }).then((r) => handle<ReplayEvent[]>(r)),
 };
