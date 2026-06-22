@@ -23,6 +23,7 @@ scikit-learn
 # Auth
 google-auth
 requests
+PyJWT
 
 # HTTP client (groq dependency)
 httpx
