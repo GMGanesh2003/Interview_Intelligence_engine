@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
+import { FaceLandmarker, ObjectDetector, FilesetResolver } from "@mediapipe/tasks-vision";
 
 export type FaceSample = {
   timestamp_sec: number;
@@ -9,6 +9,8 @@ export type FaceSample = {
   head_movement: number;
   face_visible: boolean;
   posture_score: number;
+  multiple_faces: boolean;
+  cell_phone: boolean;
 };
 
 const YAW_THRESHOLD_DEG = 18;
@@ -26,13 +28,9 @@ function decodeYawPitch(m: number[]): { yaw: number; pitch: number } {
 }
 
 /**
- * Runs MediaPipe Face Mesh (FaceLandmarker) against a <video> element and
- * reports Eye Contact, Head Movement, Face Visibility, and Posture once per
- * second — matching Module 3 (Video Intelligence) of the plan.
- *
- * NOTE: eye-contact and posture are heuristics derived from head pose /
- * face-box position (no dedicated gaze or body-pose model). Good enough for
- * an MVP signal; swap in iris landmarks or MediaPipe Pose for more rigor.
+ * Runs MediaPipe Face Mesh and Object Detector against a <video> element.
+ * Reports Eye Contact, Head Movement, Face Visibility, Posture, and Cheating Flags (multiple faces, cell phone)
+ * once per second.
  */
 export function useFaceTracking(
   videoRef: React.RefObject<HTMLVideoElement | null>,
@@ -41,7 +39,10 @@ export function useFaceTracking(
 ) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
   const landmarkerRef = useRef<FaceLandmarker | null>(null);
+  const detectorRef = useRef<ObjectDetector | null>(null);
+  
   const lastNoseRef = useRef<{ x: number; y: number } | null>(null);
   const lastSampleAtRef = useRef(0);
   const rafRef = useRef<number | null>(null);
@@ -54,27 +55,42 @@ export function useFaceTracking(
         const filesetResolver = await FilesetResolver.forVisionTasks(
           "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
         );
+        
+        // 1. Face Landmarker (numFaces: 2 for multiple person detection)
         const landmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
           baseOptions: {
-            modelAssetPath:
-              "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+            modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
             delegate: "GPU",
           },
           runningMode: "VIDEO",
-          numFaces: 1,
+          numFaces: 2,
           outputFacialTransformationMatrixes: true,
         });
+
+        // 2. Object Detector (EfficientDet-Lite0 for cell phone detection)
+        const detector = await ObjectDetector.createFromOptions(filesetResolver, {
+          baseOptions: {
+            modelAssetPath: "https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite",
+            delegate: "GPU",
+          },
+          runningMode: "VIDEO",
+          scoreThreshold: 0.5,
+          maxResults: 3,
+        });
+
         if (!cancelled) {
           landmarkerRef.current = landmarker;
+          detectorRef.current = detector;
           setReady(true);
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load face model");
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load AI models");
       }
     })();
     return () => {
       cancelled = true;
       landmarkerRef.current?.close();
+      detectorRef.current?.close();
     };
   }, []);
 
@@ -86,18 +102,39 @@ export function useFaceTracking(
     const loop = () => {
       const video = videoRef.current;
       const landmarker = landmarkerRef.current;
-      if (video && landmarker && video.readyState >= 2) {
+      const detector = detectorRef.current;
+      
+      if (video && landmarker && detector && video.readyState >= 2) {
         const nowMs = performance.now();
         const elapsedSec = (nowMs - startTimeRef.current) / 1000;
-        const result = landmarker.detectForVideo(video, nowMs);
+        
+        // Run AI models
+        const faceResult = landmarker.detectForVideo(video, nowMs);
+        const objectResult = detector.detectForVideo(video, nowMs);
 
-        const faceVisible = (result.faceLandmarks?.length ?? 0) > 0;
+        // 1. Process Objects (Check for Cell Phone)
+        let hasCellPhone = false;
+        for (const detection of objectResult.detections) {
+          for (const category of detection.categories) {
+            // COCO dataset classes "cell phone" (ID 77)
+            if (category.categoryName === "cell phone" || category.categoryName === "remote") {
+              hasCellPhone = true;
+              break;
+            }
+          }
+        }
+
+        // 2. Process Faces
+        const numFaces = faceResult.faceLandmarks?.length ?? 0;
+        const faceVisible = numFaces > 0;
+        const multipleFaces = numFaces > 1;
+        
         let eyeContact = false;
         let posture = 0.5;
         let movement = 0;
 
         if (faceVisible) {
-          const landmarks = result.faceLandmarks[0];
+          const landmarks = faceResult.faceLandmarks[0];
           const nose = landmarks[1]; // nose tip
           if (lastNoseRef.current) {
             const dx = nose.x - lastNoseRef.current.x;
@@ -106,7 +143,7 @@ export function useFaceTracking(
           }
           lastNoseRef.current = { x: nose.x, y: nose.y };
 
-          const matrix = result.facialTransformationMatrixes?.[0]?.data;
+          const matrix = faceResult.facialTransformationMatrixes?.[0]?.data;
           if (matrix) {
             const { yaw, pitch } = decodeYawPitch(matrix as number[]);
             eyeContact = Math.abs(yaw) < YAW_THRESHOLD_DEG && Math.abs(pitch) < PITCH_THRESHOLD_DEG;
@@ -127,6 +164,8 @@ export function useFaceTracking(
             head_movement: Math.round(movement * 1000) / 1000,
             face_visible: faceVisible,
             posture_score: Math.round(posture * 1000) / 1000,
+            multiple_faces: multipleFaces,
+            cell_phone: hasCellPhone,
           });
         }
       }

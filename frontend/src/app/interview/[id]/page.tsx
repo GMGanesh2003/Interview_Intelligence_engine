@@ -29,6 +29,27 @@ function speak(text: string) {
   window.speechSynthesis.speak(utter);
 }
 
+function playBeep() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (typeof window === "undefined" || !(window.AudioContext || (window as any).webkitAudioContext)) return;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "sine";
+    osc.frequency.value = 800; // high pitch beep
+    gain.gain.setValueAtTime(0.5, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+  } catch (_e) {
+    // ignore audio context errors (e.g. if user hasn't interacted)
+  }
+}
+
 export default function InterviewPage() {
   const params  = useParams();
   const router  = useRouter();
@@ -51,6 +72,8 @@ export default function InterviewPage() {
   // Cheating / attention detection
   const [faceGoneAlert,   setFaceGoneAlert]   = useState(false);
   const [lookAwayAlert,   setLookAwayAlert]   = useState(false);
+  const [multipleFacesAlert, setMultipleFacesAlert] = useState(false);
+  const [cellPhoneAlert,  setCellPhoneAlert]  = useState(false);
   const faceGoneSecRef = useRef(0); // consecutive seconds face not visible
   const lookAwaySecs   = useRef(0); // consecutive seconds looking away while recording
 
@@ -88,10 +111,11 @@ export default function InterviewPage() {
             video: true,
             audio: true,
           });
-        } catch (err: any) {
-          console.warn("Could not get both camera and mic:", err.name, err.message);
+        } catch (err: unknown) {
+          const error = err as Error;
+          console.warn("Could not get both camera and mic:", error.name, error.message);
           // If the device physically lacks a webcam (NotFoundError)
-          if (err.name === 'NotFoundError' || err.message.includes('device not found')) {
+          if (error.name === 'NotFoundError' || error.message.includes('device not found')) {
             try {
               // Fallback: try getting JUST the microphone
               media = await navigator.mediaDevices.getUserMedia({
@@ -99,13 +123,13 @@ export default function InterviewPage() {
                 audio: true,
               });
               speak("No camera detected. Proceeding in audio-only mode.");
-            } catch (fallbackErr) {
+            } catch (_fallbackErr) {
               throw new Error("No microphone detected. A microphone is required for the interview.");
             }
-          } else if (err.name === 'NotAllowedError') {
+          } else if (error.name === 'NotAllowedError') {
             throw new Error("Camera or microphone access was blocked by your browser. Please click the padlock icon in your URL bar and allow access.");
           } else {
-            throw err;
+            throw error;
           }
         }
         if (!active) return;
@@ -174,12 +198,39 @@ export default function InterviewPage() {
       lookAwaySecs.current += 1;
       if (lookAwaySecs.current >= 4) {
         setLookAwayAlert(true);
+        playBeep();
         speak("Please look at the camera.");
         lookAwaySecs.current = 0; // reset after each reminder
       }
     } else {
       lookAwaySecs.current = 0;
       setLookAwayAlert(false);
+    }
+
+    // Multiple faces detected
+    if (s.multiple_faces && isRecording) {
+      setMultipleFacesAlert((prev) => {
+        if (!prev) {
+          playBeep();
+          speak("Multiple people detected in frame.");
+        }
+        return true;
+      });
+    } else {
+      setMultipleFacesAlert(false);
+    }
+
+    // Cell phone detected
+    if (s.cell_phone && isRecording) {
+      setCellPhoneAlert((prev) => {
+        if (!prev) {
+          playBeep();
+          speak("Cell phone detected.");
+        }
+        return true;
+      });
+    } else {
+      setCellPhoneAlert(false);
     }
   }, []);
 
@@ -216,6 +267,8 @@ export default function InterviewPage() {
       setIsProcessingLong(false);
       setFaceGoneAlert(false);
       setLookAwayAlert(false);
+      setMultipleFacesAlert(false);
+      setCellPhoneAlert(false);
       faceGoneSecRef.current = 0;
       lookAwaySecs.current   = 0;
     } else if (phase === "recording") {
@@ -414,6 +467,20 @@ export default function InterviewPage() {
                       </div>
                     </div>
                   )}
+                  {multipleFacesAlert && phase === "recording" && (
+                    <div className="absolute top-24 left-3 right-3 mx-auto max-w-sm">
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-alert/90 text-white text-xs font-bold animate-pulse">
+                        ⚠️ Multiple people detected in frame
+                      </div>
+                    </div>
+                  )}
+                  {cellPhoneAlert && phase === "recording" && (
+                    <div className="absolute top-36 left-3 right-3 mx-auto max-w-sm">
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-alert/90 text-white text-xs font-bold animate-pulse">
+                        📱 Unauthorized object (cell phone) detected
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Question text */}
@@ -470,6 +537,19 @@ export default function InterviewPage() {
                   <TelemetryRow label="Head Stability"  value={1 - (liveSample?.head_movement ?? 0)} color="signal" />
                   <TelemetryRow label="Posture Score"   value={liveSample?.posture_score ?? 0}        color="blue"   />
                   <TelemetryRow label="Eye Contact"     value={liveSample?.eye_contact ? 1 : 0}       color="purple" boolean />
+                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                    {Object.entries(lastResult?.technical_score?.star_detected as any || {}).map(([k, v]) => (
+                      <div key={k} className="flex justify-between items-center py-2 border-b border-line/50 last:border-0">
+                        <span className="capitalize">{k} (e.g. &quot;Situation&quot;)</span>
+                        <span className={v ? "text-signal font-bold" : "text-muted"}>
+                          {v ? "✓ Detected" : "—"}
+                        </span>
+                      </div>
+                    ))}
+                    <div className="mt-4 p-4 rounded-lg bg-warn/10 border border-warn/20 text-warn-foreground">
+                      <p className="font-bold mb-1">Feedback</p>
+                      <p>{lastResult?.technical_score?.feedback}</p>
+                    </div>
                   <div className="pt-3 border-t border-line text-[11px] text-muted leading-relaxed">
                     Face &amp; posture tracked every second. Results impact your Confidence score.
                   </div>
@@ -510,14 +590,14 @@ export default function InterviewPage() {
                           Filler Words ({lastResult.audio_metrics.filler_word_count})
                         </p>
                         <div className="flex flex-wrap gap-1.5">
-                          {lastResult.audio_metrics.filler_words.map((fw: any, i: number) => (
+                          {lastResult.audio_metrics.filler_words.map((fw: { word: string; timestamp: number }, i: number) => (
                             <span key={i} className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-warn-dim border border-warn/30 text-warn">
-                              "{fw.word}" @{fw.timestamp}s
+                              &quot;{fw.word}&quot; @{fw.timestamp}s
                             </span>
                           ))}
                         </div>
                         <p className="text-[10px] text-muted leading-relaxed">
-                          Try pausing silently instead of saying "{lastResult.audio_metrics.filler_words[0]?.word}".
+                          Try pausing silently instead of saying &quot;{lastResult.audio_metrics.filler_words[0]?.word}&quot;.
                         </p>
                       </div>
                     )}
