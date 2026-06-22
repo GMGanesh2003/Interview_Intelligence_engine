@@ -82,7 +82,7 @@ export default function InterviewPage() {
         setQuestions(qs);
 
         const media = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
+          video: true,
           audio: true,
         });
         if (!active) return;

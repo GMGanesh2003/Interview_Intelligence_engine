@@ -22,9 +22,8 @@ app = FastAPI(
 origins = [os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_origin_regex=r"https://interview-intelligence-engine.*\.vercel\.app",
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
