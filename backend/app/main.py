@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from app.database import Base, engine
-from app.routers import sessions, video, answers, replay, dashboard, benchmark
+from app.routers import sessions, video, answers, replay, dashboard, benchmark, users
 from app.seed import seed
 
 load_dotenv()
@@ -35,6 +35,7 @@ app.include_router(answers.router)
 app.include_router(replay.router)
 app.include_router(dashboard.router)
 app.include_router(benchmark.router)
+app.include_router(users.router)
 
 
 @app.get("/")

@@ -9,6 +9,20 @@ from app.database import Base
 def now():
     return datetime.datetime.utcnow()
 
+# ---------------------------------------------------------------------------
+# User Model
+# ---------------------------------------------------------------------------
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    google_sub = Column(String, unique=True, index=True, nullable=False)
+    email = Column(String, nullable=True)
+    name = Column(String, nullable=True)
+    created_at = Column(DateTime, default=now)
+
+    sessions = relationship("InterviewSession", back_populates="user", cascade="all, delete-orphan")
+
 
 # ---------------------------------------------------------------------------
 # Module 1: Interview Session Manager
@@ -28,6 +42,7 @@ class InterviewSession(Base):
     questions = relationship("Question", back_populates="session", cascade="all, delete-orphan")
     video_metrics = relationship("VideoMetric", back_populates="session", cascade="all, delete-orphan")
     replay_events = relationship("ReplayEvent", back_populates="session", cascade="all, delete-orphan")
+    user = relationship("User", back_populates="sessions", primaryjoin="User.google_sub == foreign(InterviewSession.user_id)")
 
 
 # ---------------------------------------------------------------------------

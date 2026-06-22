@@ -1,6 +1,16 @@
 import datetime
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
+# ---------- Users ----------
+class UserOut(BaseModel):
+    id: int
+    google_sub: str
+    email: Optional[str]
+    name: Optional[str]
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
 
 
 # ---------- Sessions ----------
