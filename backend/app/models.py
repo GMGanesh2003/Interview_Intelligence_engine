@@ -31,7 +31,7 @@ class InterviewSession(Base):
     __tablename__ = "sessions"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(String, index=True, nullable=True) # Google 'sub' ID
+    user_id = Column(String, ForeignKey("users.google_sub"), index=True, nullable=True) # Google 'sub' ID
     resume_text = Column(Text, nullable=False)
     role = Column(String, nullable=False)
     experience = Column(String, nullable=False)  # e.g. "fresher", "1-2 years"
@@ -42,7 +42,7 @@ class InterviewSession(Base):
     questions = relationship("Question", back_populates="session", cascade="all, delete-orphan")
     video_metrics = relationship("VideoMetric", back_populates="session", cascade="all, delete-orphan")
     replay_events = relationship("ReplayEvent", back_populates="session", cascade="all, delete-orphan")
-    user = relationship("User", back_populates="sessions", primaryjoin="User.google_sub == foreign(InterviewSession.user_id)")
+    user = relationship("User", back_populates="sessions")
 
 
 # ---------------------------------------------------------------------------
