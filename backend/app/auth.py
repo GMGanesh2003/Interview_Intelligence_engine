@@ -8,47 +8,27 @@ from app import models
 
 security = HTTPBearer()
 
-# Shared secret with NextAuth — must match NEXTAUTH_SECRET in frontend .env
+# Shared secret — MUST match NEXTAUTH_SECRET in frontend .env / Vercel env vars
 NEXTAUTH_SECRET = os.getenv("NEXTAUTH_SECRET", "super_secret_interview_engine_key_12345")
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 
 
-def _decode_nextauth_jwt(token: str) -> dict:
+def _decode_token(token: str) -> dict:
     """
-    Decode a NextAuth-signed JWT using the shared NEXTAUTH_SECRET.
-    NextAuth uses HS256 by default when NEXTAUTH_SECRET is set.
-    Falls back to Google id_token verification for tokens that are
-    not issued by NextAuth (e.g. direct API calls in dev).
+    Decode a JWT minted by our /api/auth/token Next.js endpoint.
+    It is signed with HS256 using NEXTAUTH_SECRET.
     """
     try:
         payload = jwt.decode(
             token,
             NEXTAUTH_SECRET,
             algorithms=["HS256"],
-            options={"verify_aud": False},  # NextAuth doesn't set aud in JWT tokens
+            options={"verify_aud": False},
         )
         return payload
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Session expired — please sign in again")
-    except jwt.InvalidTokenError:
-        pass  # Not a NextAuth JWT — fall through to Google verification
-
-    # --- Fallback: try Google id_token verification ---
-    try:
-        from google.oauth2 import id_token as google_id_token
-        from google.auth.transport import requests as google_requests
-        idinfo = google_id_token.verify_oauth2_token(
-            token, google_requests.Request(), GOOGLE_CLIENT_ID or None
-        )
-        return {
-            "sub": idinfo["sub"],
-            "email": idinfo.get("email"),
-            "name": idinfo.get("name"),
-        }
-    except Exception:
-        pass
-
-    raise HTTPException(status_code=401, detail="Invalid or expired authentication token")
+    except jwt.InvalidTokenError as e:
+        raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
 
 
 def get_current_user(
@@ -57,7 +37,7 @@ def get_current_user(
 ) -> dict:
     token = credentials.credentials
 
-    # Guest shortcut
+    # ── Guest shortcut ──────────────────────────────────────────────────────
     if token == "guest_token_123":
         user_info = {
             "sub": "guest",
@@ -67,17 +47,18 @@ def get_current_user(
         _upsert_user(db, user_info)
         return user_info
 
-    payload = _decode_nextauth_jwt(token)
+    # ── Decode HS256 JWT minted by /api/auth/token ──────────────────────────
+    payload = _decode_token(token)
 
-    # NextAuth JWT structure: token contains sub, email, name directly
-    # or nested under a "user" key depending on the callback config
-    sub   = payload.get("sub") or payload.get("id")
+    sub   = payload.get("sub")
     email = payload.get("email")
     name  = payload.get("name")
 
-    # Some NextAuth versions nest user info differently
     if not sub:
-        raise HTTPException(status_code=401, detail="Could not extract user identity from token")
+        raise HTTPException(
+            status_code=401,
+            detail="Token missing 'sub' claim — cannot identify user",
+        )
 
     user_info = {"sub": sub, "email": email, "name": name}
     _upsert_user(db, user_info)
@@ -85,7 +66,7 @@ def get_current_user(
 
 
 def _upsert_user(db: Session, user_info: dict):
-    """Insert user into DB if they don't exist yet."""
+    """Insert user into DB on first login; never raises."""
     try:
         existing = db.query(models.User).filter(
             models.User.google_sub == user_info["sub"]
@@ -98,4 +79,4 @@ def _upsert_user(db: Session, user_info: dict):
             ))
             db.commit()
     except Exception:
-        db.rollback()  # Never let a DB error block the auth flow
+        db.rollback()
