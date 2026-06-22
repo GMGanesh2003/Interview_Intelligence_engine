@@ -114,22 +114,22 @@ export default function InterviewPage() {
         } catch (err: unknown) {
           const error = err as Error;
           console.warn("Could not get both camera and mic:", error.name, error.message);
-          // If the device physically lacks a webcam (NotFoundError)
-          if (error.name === 'NotFoundError' || error.message.includes('device not found')) {
-            try {
-              // Fallback: try getting JUST the microphone
-              media = await navigator.mediaDevices.getUserMedia({
-                video: false,
-                audio: true,
-              });
-              speak("No camera detected. Proceeding in audio-only mode.");
-            } catch (_fallbackErr) {
-              throw new Error("No microphone detected. A microphone is required for the interview.");
-            }
-          } else if (error.name === 'NotAllowedError') {
+          
+          if (error.name === 'NotAllowedError') {
             throw new Error("Camera or microphone access was blocked by your browser. Please click the padlock icon in your URL bar and allow access.");
-          } else {
-            throw error;
+          }
+
+          // If the device physically lacks a webcam or it's in use
+          try {
+            // Fallback: try getting JUST the microphone
+            media = await navigator.mediaDevices.getUserMedia({
+              video: false,
+              audio: true,
+            });
+            speak("Camera issue detected. Proceeding in audio-only mode.");
+          } catch (fallbackErr: unknown) {
+            const fbError = fallbackErr as Error;
+            throw new Error(`Microphone error: ${fbError.name} - ${fbError.message}. Make sure your microphone is plugged in, not used by another app, and allowed in Windows Privacy Settings.`);
           }
         }
         if (!active) return;
